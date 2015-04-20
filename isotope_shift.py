@@ -96,6 +96,22 @@ def predict_isotope_shifts(aa_name):
 
     return ca_shift, cb_shift
 
+
+def correct_for_isotope_shift(aa_name, atom_name, shift, deuterated=False):
+
+    if atom_name not in ('CA', 'CB'):
+        raise ValueError('''Only isotope correction data available
+                            for CA and CB, not for {}'''.format(atom_name))
+
+    atom_index = ['CA', 'CB'].index(atom_name)
+    isotope_shift = talos_iso_corr[aa_name][atom_index]
+
+    if deuterated:
+        isotope_shift *= -1
+
+    return shift + isotope_shift
+
+
 if __name__ == '__main__':
 
     for aa_name, deuterons in deuterons_aa_dict.items():

@@ -1,10 +1,15 @@
 
 from memops.gui.LabelFrame import LabelFrame
+from memops.gui.PulldownList import PulldownList
+from memops.gui.CheckButton import CheckButton
+from memops.gui.Label import Label
+from memops.gui.ScrolledMatrix import ScrolledMatrix
 from ccpnmr.analysis.popups.BasePopup import BasePopup
 from ccpnmr.analysis.core.MoleculeBasic import getResidueCode
-from memops.gui.ScrolledMatrix import ScrolledMatrix
 from ccpnmr.analysis.core.AssignmentBasic import (getShiftLists,
                                                   makeResonanceGuiName)
+from isotope_shift import correct_for_isotope_shift
+
 
 
 def open_spinsystem_compare(argServer):
@@ -12,16 +17,17 @@ def open_spinsystem_compare(argServer):
        Inputs: ArgumentServer
        Output: None
     """
-    SpinSystemCompatePopup(argServer.parent)
+    SpinSystemComparePopup(argServer.parent)
 
 
-class SpinSystemCompatePopup(BasePopup):
+class SpinSystemComparePopup(BasePopup):
 
     def __init__(self, parent, *args, **kw):
 
-
         self.guiParent = parent
         self.selectedSpinSystem1 = None
+        self.protonatedShiftList = None
+        self.deuteratedShiftList = None
 
         BasePopup.__init__(self, parent, title="Compare Spin Systems", **kw)
 
@@ -37,7 +43,7 @@ class SpinSystemCompatePopup(BasePopup):
         self.geometry('800x530')
 
         guiFrame.grid_columnconfigure(0, weight=1)
-        guiFrame.grid_rowconfigure(0, weight=1)
+        guiFrame.grid_rowconfigure(0, weight=0)
         guiFrame.grid_rowconfigure(1, weight=2)
         guiFrame.grid_rowconfigure(2, weight=1)
 
@@ -46,10 +52,9 @@ class SpinSystemCompatePopup(BasePopup):
 
         frameA = LabelFrame(guiFrame, text='Spin Systems')
         frameA.grid(row=1, column=0, sticky='nsew')
-
         frameA.grid_rowconfigure(0, weight=1)
-        frameA.grid_columnconfigure(0,  weight=1)
-        frameA.grid_columnconfigure(1,  weight=1)
+        frameA.grid_columnconfigure(0, weight=1)
+        frameA.grid_columnconfigure(1, weight=1)
 
         frameA1 = LabelFrame(frameA, text='Spin System 1')
         frameA1.grid(row=0, column=0, sticky='nsew')
@@ -65,9 +70,9 @@ class SpinSystemCompatePopup(BasePopup):
         frameB.grid(row=2, column=0, sticky='nsew')
 
         frameB.grid_rowconfigure(0, weight=1)
-        frameB.grid_columnconfigure(0,  weight=1)
-        frameB.grid_columnconfigure(1,  weight=2)
-        frameB.grid_columnconfigure(2,  weight=1)
+        frameB.grid_columnconfigure(0, weight=1)
+        frameB.grid_columnconfigure(1, weight=2)
+        frameB.grid_columnconfigure(2, weight=1)
 
         frameB1 = LabelFrame(frameB, text='Unique to Spin System 1')
         frameB1.grid(row=0, column=0, sticky='nsew')
@@ -81,21 +86,44 @@ class SpinSystemCompatePopup(BasePopup):
         frameB3.grid(row=0, column=2, sticky='nsew')
         frameB3.expandGrid(0, 0)
 
+        # Settings for isotope shift correction
+
+        shiftLists = getShiftLists(self.nmrProject)
+        self.protonatedShiftList = self.deuteratedShiftList = shiftLists[0]
+        shiftListNames = ['{}: {}'.format(shiftList.serial, shiftList.name) for shiftList in shiftLists]
+
+        Label(isotopeFrame, text='Correct for isotope shift:', grid=(0, 0))
+        self.labelCheck = CheckButton(isotopeFrame, selected=True, grid=(0, 1))
+        Label(isotopeFrame, text='Protonated shift list:', grid=(1, 0))
+        self.protonatedPulldown = PulldownList(isotopeFrame,
+                                               callback=self.setProtonatedShiftList,
+                                               texts=shiftListNames,
+                                               objects=shiftLists,
+                                               grid=(1, 1),
+                                               index=0)
+
+        Label(isotopeFrame, text='Deuterated shift list:', grid=(2, 0))
+        self.protonatedPulldown = PulldownList(isotopeFrame,
+                                               callback=self.setDeuteratedShiftList,
+                                               texts=shiftListNames,
+                                               objects=shiftLists,
+                                               grid=(2, 1),
+                                               index=0)
+
+
+
         # Table A1
 
         headingList = ['#', 'shift lists', 'Assignment', 'overlapping']
 
-        tipTexts = ['Spin System Serial', 'shift lists','The residue (tentatively) assigned to this spin system',
+        tipTexts = ['Spin System Serial',
+                    'shift lists', 'The residue (tentatively) assigned to this spin system',
                     'The amount of spin systems that overlap with this spin system and have no violations']
 
-        editWidgets = [None, None, None, None]
-
-        editGetCallbacks = [self.updateTableA2, self.updateTableA2, self.updateTableA2, self.updateTableA2]
-
-        editSetCallbacks = [None, None, None, None]
+        editGetCallbacks = [self.updateTableA2]*4
+        editSetCallbacks = [None]*4
 
         self.tableA1 = ScrolledMatrix(frameA1, headingList=headingList,
-                                      #editWidgets=editWidgets,
                                       multiSelect=False,
                                       editGetCallbacks=editGetCallbacks,
                                       editSetCallbacks=editSetCallbacks,
@@ -108,12 +136,9 @@ class SpinSystemCompatePopup(BasePopup):
         tipTexts = ['Spin System Serial', 'The residue (tentatively) assigned to this spin system',
                     'Root mean squared deviation of this spin system to the spin system selected in the table on the left.']
 
-        editWidgets = [None, None, None]
+        #editWidgets = [None]
 
-        editGetCallbacks = [self.updateCompareTables,
-                            self.updateCompareTables,
-                            self.updateCompareTables,
-                            self.updateCompareTables]
+        editGetCallbacks = [self.updateCompareTables]*4
 
         editSetCallbacks = [None, None, None, None]
 
@@ -129,32 +154,21 @@ class SpinSystemCompatePopup(BasePopup):
 
         headingList = ['atom', 'c.s.']
         tipTexts = ['atom', 'chemical shift']
-        editWidgets = [None, None]
-        editGetCallbacks = [None, None]
-        editSetCallbacks = [None, None]
-        self.tableB1 = ScrolledMatrix(frameB1, headingList=headingList,
-                                      #callback=self.noAction,
-                                      editWidgets=editWidgets,
+        self.tableB1 = ScrolledMatrix(frameB1,
+                                      headingList=headingList,
                                       multiSelect=False,
-                                      editGetCallbacks=editGetCallbacks,
-                                      editSetCallbacks=editSetCallbacks,
                                       tipTexts=tipTexts)
         self.tableB1.grid(row=0, column=0, sticky='nsew')
 
         # Table B 2
 
-        headingList = ['atom', 'c.s. 1',  'c.s. 2',  'delta c.s.']
-        tipTexts = ['name of the atom',  'chemical shift of atom with this name in spin system 1',
+        headingList = ['atom', 'c.s. 1', 'c.s. 2', 'delta c.s.']
+        tipTexts = ['name of the atom', 'chemical shift of atom with this name in spin system 1',
                     'chemical shift of atom with this name in spin system 2',
                     'difference between the chemical shift of spin systems 1 and 2']
-        editWidgets = [None, None, None, None]
-        editGetCallbacks = [None, None, None, None]
-        editSetCallbacks = [None, None, None, None]
-        self.tableB2 = ScrolledMatrix(frameB2, headingList=headingList,
-                                      editWidgets=editWidgets,
-                                      multiSelect=False,
-                                      editGetCallbacks=editGetCallbacks,
-                                      editSetCallbacks=editSetCallbacks,
+
+        self.tableB2 = ScrolledMatrix(frameB2,
+                                      headingList=headingList,
                                       tipTexts=tipTexts)
         self.tableB2.grid(row=0, column=0, sticky='nsew')
 
@@ -162,15 +176,9 @@ class SpinSystemCompatePopup(BasePopup):
 
         headingList = ['atom', 'c.s.']
         tipTexts = ['atom', 'chemical shift.']
-        editWidgets = [None, None]
-        editGetCallbacks = [None, None]
-        editSetCallbacks = [None, None]
-        self.tableB3 = ScrolledMatrix(frameB3, headingList=headingList,
-                                      #callback=self.noAction,
-                                      editWidgets=editWidgets,
+        self.tableB3 = ScrolledMatrix(frameB3,
+                                      headingList=headingList,
                                       multiSelect=False,
-                                      editGetCallbacks=editGetCallbacks,
-                                      editSetCallbacks=editSetCallbacks,
                                       tipTexts=tipTexts)
         self.tableB3.grid(row=0, column=0, sticky='nsew')
 
@@ -180,6 +188,12 @@ class SpinSystemCompatePopup(BasePopup):
         self.updateTableA1()
         self.compareSpinSystems()
         self.updateTableA1()
+
+    def setProtonatedShiftList(self, shiftList):
+        self.protonatedShiftList = shiftList
+
+    def setDeuteratedShiftList(self, shiftList):
+        self.deuteratedShiftList = shiftList
 
     def updateTableA1(self):
 
@@ -234,7 +248,7 @@ class SpinSystemCompatePopup(BasePopup):
                 colorMatrix.append(['#298A08', '#298A08',
                                     '#298A08', '#298A08'])
             else:
-                colorMatrix.append([None,  None,  None, None])
+                colorMatrix.append([None]*4)
 
             data.append(oneRow)
 
@@ -263,7 +277,7 @@ class SpinSystemCompatePopup(BasePopup):
 
             table.update(objectList=data, textMatrix=data)
 
-    def updateCompareTables(self,  obj):
+    def updateCompareTables(self, obj):
 
         matching = self.matchMatrix[self.selectedSpinSystem1][obj]
 
@@ -302,7 +316,7 @@ class SpinSystemCompatePopup(BasePopup):
                                                  matching.violationDelta):
 
             oneRow = []
-            colorMatrix.append([None, None, None,  None])
+            colorMatrix.append([None]*4)
             oneRow.append(makeResonanceString(resonance1))
             oneRow.append(resonance1.findFirstShift().value)
             oneRow.append(resonance2.findFirstShift().value)
@@ -329,9 +343,9 @@ class SpinSystemCompatePopup(BasePopup):
                 if not spinSystem2.resonances:
                     continue
 
-                self.compare2spinSystems(spinSystem1,  spinSystem2)
+                self.compare2spinSystems(spinSystem1, spinSystem2)
 
-    def compare2spinSystems(self,  spinSystem1,  spinSystem2):
+    def compare2spinSystems(self, spinSystem1, spinSystem2):
 
         newMatch = SpinSystemMatch()
 
@@ -344,7 +358,7 @@ class SpinSystemCompatePopup(BasePopup):
 
                 if not (resonance1.assignNames and resonance2.assignNames):
                     continue
-                if not (resonance1.assignNames[0] == resonance2.assignNames[0]):
+                if not resonance1.assignNames[0] == resonance2.assignNames[0]:
                     continue
                 if not (resonance1.findFirstShift() and resonance2.findFirstShift()):
                     continue
@@ -423,7 +437,7 @@ def make_resonanceGroup_string(resonanceGroup):
     if resonanceGroup.residue:
 
         string = '{} {}'.format(resonanceGroup.residue.seqCode,
-                                  getResidueCode(resonanceGroup.residue.molResidue))
+                                getResidueCode(resonanceGroup.residue.molResidue))
 
     elif resonanceGroup.residueProbs:
 
