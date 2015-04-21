@@ -11,7 +11,6 @@ from ccpnmr.analysis.core.AssignmentBasic import (getShiftLists,
 from isotope_shift import correct_for_isotope_shift as correct
 
 
-
 def open_spinsystem_compare(argServer):
     """Descrn: Opens the shift reference pop-up for two residue types.
        Inputs: ArgumentServer
@@ -121,8 +120,8 @@ class SpinSystemComparePopup(BasePopup):
                     'shift lists', 'The residue (tentatively) assigned to this spin system',
                     'The amount of spin systems that overlap with this spin system and have no violations']
 
-        editGetCallbacks = [self.updateTableA2]*4
-        editSetCallbacks = [None]*4
+        editGetCallbacks = [self.updateTableA2]*3
+        editSetCallbacks = [None]*3
 
         self.tableA1 = ScrolledMatrix(frameA1, headingList=headingList,
                                       multiSelect=False,
@@ -141,7 +140,7 @@ class SpinSystemComparePopup(BasePopup):
 
         editGetCallbacks = [self.updateCompareTables]*4
 
-        editSetCallbacks = [None, None, None, None]
+        editSetCallbacks = [None]*4
 
         self.tableA2 = ScrolledMatrix(frameA2, headingList=headingList,
                                       #editWidgets=editWidgets,
@@ -187,8 +186,8 @@ class SpinSystemComparePopup(BasePopup):
         self.amountOfMatchesPerSpinSystem = {}
 
         self.updateTableA1()
-        self.compareSpinSystems()
-        self.updateTableA1()
+        #self.compareSpinSystems()
+        #self.updateTableA1()
 
     def setProtonatedShiftList(self, shiftList):
         self.protonatedShiftList = shiftList
@@ -201,20 +200,18 @@ class SpinSystemComparePopup(BasePopup):
         data = []
         objectList = []
 
-        for key in self.matchMatrix:
+        spinSystems = self.nmrProject.resonanceGroups
 
-            shiftLists_string = make_shiftLists_string(find_all_shiftLists_for_resonanceGroup(key))
+        #for key in self.matchMatrix:
+        for spinSystem in spinSystems:
 
-            objectList.append(key)
+            shiftLists_string = make_shiftLists_string(find_all_shiftLists_for_resonanceGroup(spinSystem))
+
+            objectList.append(spinSystem)
             oneRow = []
-            oneRow.append(key.serial)
+            oneRow.append(spinSystem.serial)
             oneRow.append(shiftLists_string)
-            oneRow.append(make_resonanceGroup_string(key))
-
-            if key in self.amountOfMatchesPerSpinSystem:
-                oneRow.append(self.amountOfMatchesPerSpinSystem[key])
-            else:
-                oneRow.append(0)
+            oneRow.append(make_resonanceGroup_string(spinSystem))
 
             data.append(oneRow)
 
@@ -227,25 +224,29 @@ class SpinSystemComparePopup(BasePopup):
 
             self.selectedSpinSystem1 = obj
 
+        comparisons = self.compareToSpinSystem(obj)
+
         data = []
         objectList = []
         colorMatrix = []
 
-        for resonanceGroup, match in self.matchMatrix[obj].items():
+        for comp in comparisons:
 
-            objectList.append(resonanceGroup)
+            resonanceGroup = comp.spinSystem2
+
+            objectList.append(comp)
             oneRow = []
             oneRow.append(resonanceGroup.serial)
             shiftLists_string = make_shiftLists_string(find_all_shiftLists_for_resonanceGroup(resonanceGroup))
             oneRow.append(shiftLists_string)
             oneRow.append(make_resonanceGroup_string(resonanceGroup))
 
-            if match.deviation is None:
+            if comp.deviation is None:
                 oneRow.append('-')
             else:
-                oneRow.append(match.deviation)
+                oneRow.append(comp.deviation)
 
-            if match.match:
+            if comp.match:
                 colorMatrix.append(['#298A08']*4)
             else:
                 colorMatrix.append([None]*4)
@@ -262,7 +263,7 @@ class SpinSystemComparePopup(BasePopup):
 
     def updateCompareTables(self, obj):
 
-        spinSystemComp = self.matchMatrix[self.selectedSpinSystem1][obj]
+        spinSystemComp = obj #self.matchMatrix[self.selectedSpinSystem1][obj]
         self.updateUnionTable(spinSystemComp)
         self.updateDiffTables(spinSystemComp)
 
@@ -316,6 +317,22 @@ class SpinSystemComparePopup(BasePopup):
 
                 self.compare2spinSystems(spinSystem1, spinSystem2)
 
+    def compareToSpinSystem(self, spinSystem):
+
+        spinSystems = self.nmrProject.resonanceGroups
+        comparisons = []
+
+        for spinSystem2 in spinSystems:
+
+            comparisons.append(self.compare2spinSystems(spinSystem,
+                                                        spinSystem2))
+
+        return comparisons
+
+
+
+
+
     def compare2spinSystems(self, spinSystem1, spinSystem2):
 
         correction = self.correctCheck.isSelected()
@@ -326,10 +343,12 @@ class SpinSystemComparePopup(BasePopup):
                                     protonatedShiftList=self.protonatedShiftList,
                                     deuteratedShiftList=self.deuteratedShiftList)
 
-        if spinSystem1 in self.matchMatrix:
-            self.matchMatrix[spinSystem1][spinSystem2] = comp
-        else:
-            self.matchMatrix[spinSystem1] = {spinSystem2: comp}
+        return comp
+
+        #if spinSystem1 in self.matchMatrix:
+        #    self.matchMatrix[spinSystem1][spinSystem2] = comp
+        #else:
+        #    self.matchMatrix[spinSystem1] = {spinSystem2: comp}
 
 
 def find_all_shiftLists_for_resonanceGroup(resonanceGroup):
