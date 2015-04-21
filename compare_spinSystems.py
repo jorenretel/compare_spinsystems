@@ -8,7 +8,7 @@ from ccpnmr.analysis.popups.BasePopup import BasePopup
 from ccpnmr.analysis.core.MoleculeBasic import getResidueCode
 from ccpnmr.analysis.core.AssignmentBasic import (getShiftLists,
                                                   makeResonanceGuiName)
-from isotope_shift import correct_for_isotope_shift
+from isotope_shift import correct_for_isotope_shift as correct
 
 
 
@@ -89,11 +89,12 @@ class SpinSystemComparePopup(BasePopup):
         # Settings for isotope shift correction
 
         shiftLists = getShiftLists(self.nmrProject)
-        self.protonatedShiftList = self.deuteratedShiftList = shiftLists[0]
+        self.protonatedShiftList = shiftLists[0]
+        self.deuteratedShiftList = shiftLists[1]
         shiftListNames = ['{}: {}'.format(shiftList.serial, shiftList.name) for shiftList in shiftLists]
 
         Label(isotopeFrame, text='Correct for isotope shift:', grid=(0, 0))
-        self.labelCheck = CheckButton(isotopeFrame, selected=True, grid=(0, 1))
+        self.correctCheck = CheckButton(isotopeFrame, selected=True, grid=(0, 1))
         Label(isotopeFrame, text='Protonated shift list:', grid=(1, 0))
         self.protonatedPulldown = PulldownList(isotopeFrame,
                                                callback=self.setProtonatedShiftList,
@@ -103,12 +104,12 @@ class SpinSystemComparePopup(BasePopup):
                                                index=0)
 
         Label(isotopeFrame, text='Deuterated shift list:', grid=(2, 0))
-        self.protonatedPulldown = PulldownList(isotopeFrame,
+        self.deuteratedPulldown = PulldownList(isotopeFrame,
                                                callback=self.setDeuteratedShiftList,
                                                texts=shiftListNames,
                                                objects=shiftLists,
                                                grid=(2, 1),
-                                               index=0)
+                                               index=1)
 
 
 
@@ -245,8 +246,7 @@ class SpinSystemComparePopup(BasePopup):
                 oneRow.append(match.deviation)
 
             if match.match:
-                colorMatrix.append(['#298A08', '#298A08',
-                                    '#298A08', '#298A08'])
+                colorMatrix.append(['#298A08']*4)
             else:
                 colorMatrix.append([None]*4)
 
@@ -260,69 +260,40 @@ class SpinSystemComparePopup(BasePopup):
                             textMatrix=data,
                             colorMatrix=colorMatrix)
 
-    def updateDiffTables(self, spinSystemMatch):
+    def updateCompareTables(self, obj):
 
-        shiftLists = getShiftLists(self.nmrProject)
+        spinSystemComp = self.matchMatrix[self.selectedSpinSystem1][obj]
+        self.updateUnionTable(spinSystemComp)
+        self.updateDiffTables(spinSystemComp)
 
-        for diff, table in [(spinSystemMatch.difference1, self.tableB1),
-                            (spinSystemMatch.difference2, self.tableB3)]:
+    def updateDiffTables(self, spinSystemComp):
+
+        for diff, table in [(spinSystemComp.difference1, self.tableB1),
+                            (spinSystemComp.difference2, self.tableB3)]:
             data = []
             for resonance in diff:
-                data.append([makeResonanceGuiName(resonance),
-                             resonance.findFirstShift().value])
-                #print resonance.findFirstShift(parentList=shiftLists[1])
-                print '---'
-                print resonance.findAllShifts(parentList=shiftLists[0])
-                print resonance.getShifts()
+                if resonance.findFirstShift():
+                    data.append([makeResonanceGuiName(resonance),
+                                 resonance.findFirstShift().value])
 
             table.update(objectList=data, textMatrix=data)
 
-    def updateCompareTables(self, obj):
-
-        matching = self.matchMatrix[self.selectedSpinSystem1][obj]
+    def updateUnionTable(self, spinSystemComp):
 
         intersectData = []
         colorMatrix = []
-        self.updateDiffTables(matching)
 
-        for resonance1, resonance2, delta in zip(matching.intersectionResonances1,
-                                                 matching.intersectionResonances2,
-                                                 matching.intersectionDelta):
+        for resComp in spinSystemComp.intersection:
 
-            oneRow = []
+            oneRow = [resComp.atomName]
+            oneRow.extend(resComp.shifts_description)
+            oneRow.append(resComp.delta)
+            intersectData.append(oneRow)
 
-            # oneRow.append(resonance1.serial)
-            # oneRow.append(resonance2.serial)
-
-            colorMatrix.append(['#298A08', '#298A08', '#298A08', '#298A08'])
-
-            if resonance1.assignNames:
-
-                oneRow.append(resonance1.assignNames[0])
-
+            if resComp.match:
+                colorMatrix.append(['#298A08']*4)
             else:
-
-                oneRow.append('?')
-
-            oneRow.append(resonance1.findFirstShift().value)
-            oneRow.append(resonance2.findFirstShift().value)
-
-            oneRow.append(delta)
-
-            intersectData.append(oneRow)
-
-        for resonance1, resonance2, delta in zip(matching.violation1,
-                                                 matching.violation2,
-                                                 matching.violationDelta):
-
-            oneRow = []
-            colorMatrix.append([None]*4)
-            oneRow.append(makeResonanceString(resonance1))
-            oneRow.append(resonance1.findFirstShift().value)
-            oneRow.append(resonance2.findFirstShift().value)
-            oneRow.append(delta)
-
-            intersectData.append(oneRow)
+                colorMatrix.append([None]*4)
 
         self.tableB2.update(objectList=intersectData,
                             textMatrix=intersectData,
@@ -347,75 +318,18 @@ class SpinSystemComparePopup(BasePopup):
 
     def compare2spinSystems(self, spinSystem1, spinSystem2):
 
-        newMatch = SpinSystemMatch()
+        correction = self.correctCheck.isSelected()
 
-        newMatch.spinSystem1 = spinSystem1
-        newMatch.spinSystem2 = spinSystem2
-
-        for resonance1 in spinSystem1.resonances:
-
-            for resonance2 in spinSystem2.resonances:
-
-                if not (resonance1.assignNames and resonance2.assignNames):
-                    continue
-                if not resonance1.assignNames[0] == resonance2.assignNames[0]:
-                    continue
-                if not (resonance1.findFirstShift() and resonance2.findFirstShift()):
-                    continue
-
-                delta = abs(resonance1.findFirstShift().value - resonance2.findFirstShift().value)
-
-                if newMatch.deviation is None:
-                    newMatch.deviation = 0
-                newMatch.deviation += delta**2
-
-                if delta < 0.5:
-
-                    newMatch.intersectionResonances1.append(resonance1)
-                    newMatch.intersectionResonances2.append(resonance2)
-                    newMatch.intersectionDelta.append(delta)
-
-                else:
-
-                    newMatch.violation1.append(resonance1)
-                    newMatch.violation2.append(resonance2)
-                    newMatch.violationDelta.append(delta)
-
-        for resonance1 in spinSystem1.resonances:
-
-            if resonance1 not in newMatch.intersectionResonances1 + newMatch.violation1:
-
-                newMatch.difference1.append(resonance1)
-
-        for resonance2 in spinSystem2.resonances:
-
-            if resonance2 not in newMatch.intersectionResonances2 + newMatch.violation2:
-
-                newMatch.difference2.append(resonance2)
-
-        if newMatch.deviation is not None and (newMatch.violation1 or newMatch.intersectionResonances1):
-            newMatch.deviation = (float(
-                newMatch.deviation) / (len(newMatch.intersectionResonances1) + len(newMatch.violation1)))**(0.5)
-
-        if newMatch.intersectionResonances1 and not newMatch.violation1:
-
-            newMatch.match = True
-
-            if spinSystem1 in self.amountOfMatchesPerSpinSystem:
-
-                self.amountOfMatchesPerSpinSystem[spinSystem1] += 1
-
-            else:
-
-                self.amountOfMatchesPerSpinSystem[spinSystem1] = 0
+        comp = SpinSystemComparison(spinSystem1=spinSystem1,
+                                    spinSystem2=spinSystem2,
+                                    isotope_correction=correction,
+                                    protonatedShiftList=self.protonatedShiftList,
+                                    deuteratedShiftList=self.deuteratedShiftList)
 
         if spinSystem1 in self.matchMatrix:
-
-            self.matchMatrix[spinSystem1][spinSystem2] = newMatch
-
+            self.matchMatrix[spinSystem1][spinSystem2] = comp
         else:
-
-            self.matchMatrix[spinSystem1] = {spinSystem2: newMatch}
+            self.matchMatrix[spinSystem1] = {spinSystem2: comp}
 
 
 def find_all_shiftLists_for_resonanceGroup(resonanceGroup):
@@ -429,6 +343,7 @@ def find_all_shiftLists_for_resonanceGroup(resonanceGroup):
 
 
 def make_shiftLists_string(shiftLists):
+
     return ','.join([str(shiftList.serial) for shiftList in shiftLists])
 
 
@@ -464,34 +379,210 @@ def make_resonanceGroup_string(resonanceGroup):
     return string
 
 
-def makeResonanceString(resonance):
+def make_resonance_string(resonance):
     if resonance.assignNames:
         return resonance.assignNames[0]
     else:
         return '[{}]'.format(resonance.serial)
 
 
+class SpinSystemComparison(object):
 
+    def __init__(self, spinSystem1, spinSystem2,
+                 isotope_correction=True,
+                 protonatedShiftList=None,
+                 deuteratedShiftList=None):
 
-class SpinSystemMatch(object):
-
-    def __init__(self):
-
-        self.spinSystem1 = None
-        self.spinSystem2 = None
-
-        self.match = False
-
+        self.spinSystem1 = spinSystem1
+        self.spinSystem2 = spinSystem2
         self.deviation = None
+        self.intersection = []
+        self.difference1 = set()
+        self.difference2 = set()
 
-        self.intersectionResonances1 = []
-        self.intersectionResonances2 = []
-        self.intersectionDelta = []
+        self.compare(isotope_correction,
+                     protonatedShiftList,
+                     deuteratedShiftList)
 
-        self.violation1 = []
-        self.violation2 = []
-        self.violationDelta = []
 
-        self.difference1 = []
-        self.difference2 = []
+    def compare(self, isotope_correction=True,
+                protonatedShiftList=None,
+                deuteratedShiftList=None):
 
+        resonances1 = self.spinSystem1.getResonances()
+        resonances2 = self.spinSystem2.getResonances()
+        combinations = []
+        compared1 = set()
+        compared2 = set()
+
+        for res1 in resonances1:
+            if not (res1.assignNames and res1.findFirstShift()):
+                continue
+            for res2 in resonances2:
+                if not (res2.assignNames and res2.findFirstShift()):
+                    continue
+                if res1.assignNames[0] == res2.assignNames[0]:
+                    combinations.append((res1, res2))
+                    compared1.add(res1)
+                    compared2.add(res2)
+
+        self.difference1 = resonances1 - compared1
+        self.difference2 = resonances2 - compared2
+
+        for res1, res2 in combinations:
+
+            if isotope_correction and protonatedShiftList \
+               and deuteratedShiftList \
+               and res1.assignNames[0] in ('CA', 'CB') \
+               and res2.assignNames[0] in ('CA', 'CB'):
+
+                shifted1 = ShiftedResonce(res1,
+                                          protonatedShiftList,
+                                          deuteratedShiftList)
+                shifted2 = ShiftedResonce(res2,
+                                          protonatedShiftList,
+                                          deuteratedShiftList)
+
+                protonated = ResonanceComparison(resonances=(res1, res2),
+                                                 deuterated=False,
+                                                 shifts=(shifted1.protonated_shift, shifted2.protonated_shift),
+                                                 estimated=(shifted1.protonated_is_estimate, shifted2.protonated_is_estimate))
+
+                deuterated = ResonanceComparison(resonances=(res1, res2),
+                                                 deuterated=True,
+                                                 shifts=(shifted1.deuterated_shift, shifted2.deuterated_shift),
+                                                 estimated=(shifted1.deuterated_is_estimate, shifted2.deuterated_is_estimate))
+
+                self.intersection.append(protonated)
+                self.intersection.append(deuterated)
+
+                average_delta = (protonated.delta + deuterated.delta) / 2.0
+
+                if not self.deviation:
+                    self.deviation = 0.0
+                self.deviation += average_delta**2
+
+            else:
+
+                shifts = (res1.findFirstShift().value,
+                          res2.findFirstShift().value)
+                comparison = ResonanceComparison(resonances=(res1, res2),
+                                                 shifts=shifts)
+
+                self.intersection.append(comparison)
+
+                if not self.deviation:
+                    self.deviation = 0.0
+                self.deviation += comparison.delta**2
+
+        if self.deviation:
+            self.deviation = self.deviation**0.5
+
+    @property
+    def match(self):
+
+        for resonance_comparison in self.intersection:
+            if not resonance_comparison.match:
+                return False
+        return True
+
+
+class ShiftedResonce(object):
+
+    def __init__(self, resonance, protonatedShiftList, deuteratedShiftList):
+
+        self.resonance = resonance
+        self.protonatedShiftList = protonatedShiftList
+        self.deuteratedShiftList = deuteratedShiftList
+        self.protonated_shift = None
+        self.deuterated_shift = None
+        self.protonated_is_estimate = False
+        self.deuterated_is_estimate = False
+        self.determine_shifts()
+
+    def determine_shifts(self):
+
+        shift_object = self.resonance.findFirstShift(parentList=self.protonatedShiftList)
+        if shift_object:
+            self.protonated_shift = shift_object.value
+        shift_object = self.resonance.findFirstShift(parentList=self.deuteratedShiftList)
+        if shift_object:
+            self.deuterated_shift = shift_object.value
+
+        # Find out amino acid type
+        aa_name = self.resonance.resonanceGroup.ccpCode
+        if not aa_name and self.resonance.resonanceGroup.residue:
+            aa_name = self.resonance.resonanceGroup.residue.ccpCode
+        if not aa_name:
+            aa_name = 'Avg'
+
+        if self.protonated_shift and not self.deuterated_shift:
+            self.deuterated_shift = correct(aa_name=aa_name,
+                                            atom_name=self.resonance.assignNames[0],
+                                            shift=self.protonated_shift,
+                                            deuterated=False)
+            self.deuterated_is_estimate = True
+
+
+        if self.deuterated_shift and not self.protonated_shift:
+            self.protonated_shift = correct(aa_name=aa_name,
+                                            atom_name=self.resonance.assignNames[0],
+                                            shift=self.deuterated_shift,
+                                            deuterated=True)
+            self.protonated_is_estimate = True
+
+
+        if not self.protonated_shift and not self.deuterated_shift:
+            print 'alarm'
+            print self.resonance.serial
+            print self.resonance.findFirstShift()
+            print 'aaaa'
+            print self.protonated_shift
+            print 'bbb'
+            print self.deuterated_shift
+
+
+class ResonanceComparison(object):
+    """docstring for resonanceMatch"""
+    def __init__(self, resonances, shifts, deuterated=False,
+                 estimated=(False, False)):
+
+        super(ResonanceComparison, self).__init__()
+        self.resonances = resonances
+        self.deuterated = deuterated
+        self.shifts = shifts
+        self.estimated = estimated
+
+    @property
+    def delta(self):
+        return abs(self.shifts[0] - self.shifts[1])
+
+    @property
+    def match(self):
+        if self.delta < 0.5:
+            return True
+        return False
+
+    @property
+    def atomName(self):
+        if self.resonances[0].assignNames:
+            name = self.resonances[0].assignNames[0]
+        elif self.resonances[1].assignNames:
+            name = self.resonances[1].assignNames[0]
+        if name:
+            if self.deuterated:
+                return '{} (D)'.format(name)
+            else:
+                return name
+
+    @property
+    def shifts_description(self):
+
+        description = []
+        for shift, estimated in zip(self.shifts, self.estimated):
+            if estimated:
+                description.append('{}?'.format(round(shift, 3)))
+            else:
+                description.append(str(round(shift, 3)))
+
+        return description
