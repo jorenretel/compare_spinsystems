@@ -24,7 +24,8 @@ class SpinSystemComparePopup(BasePopup):
     def __init__(self, parent, *args, **kw):
 
         self.guiParent = parent
-        self.selectedSpinSystem1 = None
+        self.spinSystem1 = None
+        self.spinSystem2 = None
         self.protonatedShiftList = None
         self.deuteratedShiftList = None
 
@@ -120,7 +121,7 @@ class SpinSystemComparePopup(BasePopup):
                     'shift lists', 'The residue (tentatively) assigned to this spin system',
                     'The amount of spin systems that overlap with this spin system and have no violations']
 
-        editGetCallbacks = [self.updateTableA2]*3
+        editGetCallbacks = [self.setSpinSystem1]*3
         editSetCallbacks = [None]*3
 
         self.tableA1 = ScrolledMatrix(frameA1, headingList=headingList,
@@ -138,7 +139,7 @@ class SpinSystemComparePopup(BasePopup):
 
         #editWidgets = [None]
 
-        editGetCallbacks = [self.updateCompareTables]*4
+        editGetCallbacks = [self.setSpinSystem2]*4
 
         editSetCallbacks = [None]*4
 
@@ -189,11 +190,35 @@ class SpinSystemComparePopup(BasePopup):
         #self.compareSpinSystems()
         #self.updateTableA1()
 
+    def update(self):
+        self.updateTableA2()
+        self.updateCompareTables()
+
     def setProtonatedShiftList(self, shiftList):
-        self.protonatedShiftList = shiftList
+
+        if not self.protonatedShiftList is shiftList:
+            self.protonatedShiftList = shiftList
+            self.update()
 
     def setDeuteratedShiftList(self, shiftList):
-        self.deuteratedShiftList = shiftList
+
+        if not self.deuteratedShiftList is shiftList:
+            self.deuteratedShiftList = shiftList
+            self.update()
+
+    def setSpinSystem1(self, spinSystem):
+
+        if spinSystem is not self.spinSystem1:
+
+            self.spinSystem1 = spinSystem
+            self.updateTableA2()
+
+    def setSpinSystem2(self, spinSystem):
+
+        if spinSystem is not self.spinSystem2:
+
+            self.spinSystem2 = spinSystem
+            self.updateCompareTables()
 
     def updateTableA1(self):
 
@@ -218,13 +243,9 @@ class SpinSystemComparePopup(BasePopup):
         self.tableA1.update(objectList=objectList, textMatrix=data)
         self.tableA1.sortLine(2)
 
-    def updateTableA2(self, obj):
+    def updateTableA2(self):
 
-        if obj != self.selectedSpinSystem1:
-
-            self.selectedSpinSystem1 = obj
-
-        comparisons = self.compareToSpinSystem(obj)
+        comparisons = self.compareToSpinSystem(self.spinSystem1)
 
         data = []
         objectList = []
@@ -234,7 +255,7 @@ class SpinSystemComparePopup(BasePopup):
 
             resonanceGroup = comp.spinSystem2
 
-            objectList.append(comp)
+            objectList.append(resonanceGroup)
             oneRow = []
             oneRow.append(resonanceGroup.serial)
             shiftLists_string = make_shiftLists_string(find_all_shiftLists_for_resonanceGroup(resonanceGroup))
@@ -253,17 +274,16 @@ class SpinSystemComparePopup(BasePopup):
 
             data.append(oneRow)
 
-        #datazip = zip(data)
-        #data.sort(key=lambda x: x[2])
 
         data, objectList, colorMatrix = zip(*sorted(zip(data, objectList, colorMatrix), key=lambda x: x[0][3]))
         self.tableA2.update(objectList=objectList,
                             textMatrix=data,
                             colorMatrix=colorMatrix)
 
-    def updateCompareTables(self, obj):
+    def updateCompareTables(self):
 
-        spinSystemComp = obj #self.matchMatrix[self.selectedSpinSystem1][obj]
+        spinSystemComp = self.compare2spinSystems(self.spinSystem1,
+                                                  self.spinSystem2)
         self.updateUnionTable(spinSystemComp)
         self.updateDiffTables(spinSystemComp)
 
