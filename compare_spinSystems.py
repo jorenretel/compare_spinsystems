@@ -26,6 +26,7 @@ class SpinSystemComparePopup(BasePopup):
         self.guiParent = parent
         self.spinSystem1 = None
         self.spinSystem2 = None
+        self.correction = True
         self.protonatedShiftList = None
         self.deuteratedShiftList = None
 
@@ -47,7 +48,7 @@ class SpinSystemComparePopup(BasePopup):
         guiFrame.grid_rowconfigure(1, weight=2)
         guiFrame.grid_rowconfigure(2, weight=1)
 
-        isotopeFrame = LabelFrame(guiFrame, text='Isotope Shift Correction')
+        isotopeFrame = LabelFrame(guiFrame, text='Isotope Shift Correction CA and CB')
         isotopeFrame.grid(row=0, column=0, sticky='nsew')
 
         frameA = LabelFrame(guiFrame, text='Spin Systems')
@@ -94,7 +95,10 @@ class SpinSystemComparePopup(BasePopup):
         shiftListNames = ['{}: {}'.format(shiftList.serial, shiftList.name) for shiftList in shiftLists]
 
         Label(isotopeFrame, text='Correct for isotope shift:', grid=(0, 0))
-        self.correctCheck = CheckButton(isotopeFrame, selected=True, grid=(0, 1))
+        self.correctCheck = CheckButton(isotopeFrame,
+                                        selected=True,
+                                        callback=self.setCorrection,
+                                        grid=(0, 1))
         Label(isotopeFrame, text='Protonated shift list:', grid=(1, 0))
         self.protonatedPulldown = PulldownList(isotopeFrame,
                                                callback=self.setProtonatedShiftList,
@@ -115,7 +119,7 @@ class SpinSystemComparePopup(BasePopup):
 
         # Table A1
 
-        headingList = ['#', 'shift lists', 'Assignment', 'overlapping']
+        headingList = ['#', 'shift lists', 'Assignment']
 
         tipTexts = ['Spin System Serial',
                     'shift lists', 'The residue (tentatively) assigned to this spin system',
@@ -123,7 +127,6 @@ class SpinSystemComparePopup(BasePopup):
 
         editGetCallbacks = [self.setSpinSystem1]*3
         editSetCallbacks = [None]*3
-
         self.tableA1 = ScrolledMatrix(frameA1, headingList=headingList,
                                       multiSelect=False,
                                       editGetCallbacks=editGetCallbacks,
@@ -132,17 +135,11 @@ class SpinSystemComparePopup(BasePopup):
         self.tableA1.grid(row=0, column=0, sticky='nsew')
 
         # Table A2
-
         headingList = ['#', 'shift lists', 'Assignment', 'RMSD']
         tipTexts = ['Spin System Serial', 'The residue (tentatively) assigned to this spin system',
                     'Root mean squared deviation of this spin system to the spin system selected in the table on the left.']
-
-        #editWidgets = [None]
-
         editGetCallbacks = [self.setSpinSystem2]*4
-
         editSetCallbacks = [None]*4
-
         self.tableA2 = ScrolledMatrix(frameA2, headingList=headingList,
                                       #editWidgets=editWidgets,
                                       multiSelect=False,
@@ -152,7 +149,6 @@ class SpinSystemComparePopup(BasePopup):
         self.tableA2.grid(row=0, column=0, sticky='nsew')
 
         # Table B1
-
         headingList = ['atom', 'c.s.']
         tipTexts = ['atom', 'chemical shift']
         self.tableB1 = ScrolledMatrix(frameB1,
@@ -162,7 +158,6 @@ class SpinSystemComparePopup(BasePopup):
         self.tableB1.grid(row=0, column=0, sticky='nsew')
 
         # Table B 2
-
         headingList = ['atom', 'c.s. 1', 'c.s. 2', 'delta c.s.']
         tipTexts = ['name of the atom', 'chemical shift of atom with this name in spin system 1',
                     'chemical shift of atom with this name in spin system 2',
@@ -174,7 +169,6 @@ class SpinSystemComparePopup(BasePopup):
         self.tableB2.grid(row=0, column=0, sticky='nsew')
 
         # Table B 3
-
         headingList = ['atom', 'c.s.']
         tipTexts = ['atom', 'chemical shift.']
         self.tableB3 = ScrolledMatrix(frameB3,
@@ -187,12 +181,16 @@ class SpinSystemComparePopup(BasePopup):
         self.amountOfMatchesPerSpinSystem = {}
 
         self.updateTableA1()
-        #self.compareSpinSystems()
-        #self.updateTableA1()
 
     def update(self):
-        self.updateTableA2()
-        self.updateCompareTables()
+        if self.spinSystem1 and self.spinSystem2:
+            self.updateTableA2()
+            self.updateCompareTables()
+
+    def setCorrection(self, selected):
+        if self.correction is not selected:
+            self.correction = selected
+            self.update()
 
     def setProtonatedShiftList(self, shiftList):
 
@@ -227,7 +225,6 @@ class SpinSystemComparePopup(BasePopup):
 
         spinSystems = self.nmrProject.resonanceGroups
 
-        #for key in self.matchMatrix:
         for spinSystem in spinSystems:
 
             shiftLists_string = make_shiftLists_string(find_all_shiftLists_for_resonanceGroup(spinSystem))
@@ -289,13 +286,35 @@ class SpinSystemComparePopup(BasePopup):
 
     def updateDiffTables(self, spinSystemComp):
 
+        correction = self.correction
+
         for diff, table in [(spinSystemComp.difference1, self.tableB1),
                             (spinSystemComp.difference2, self.tableB3)]:
             data = []
             for resonance in diff:
-                if resonance.findFirstShift():
-                    data.append([makeResonanceGuiName(resonance),
-                                 resonance.findFirstShift().value])
+                if resonance_in_shiftLists(resonance,
+                                           [self.protonatedShiftList,
+                                            self.deuteratedShiftList]):
+
+                    if correction and self.protonatedShiftList \
+                       and self.deuteratedShiftList \
+                       and resonance.assignNames[0] in ('CA', 'CB') \
+                       and resonance.assignNames[0] in ('CA', 'CB'):
+
+                        shifted = ShiftedResonce(resonance,
+                                                 self.protonatedShiftList,
+                                                 self.deuteratedShiftList)
+
+                        data.append([shifted.make_resonance_name(),
+                                     shifted.make_shift_description()])
+
+                        data.append([shifted.make_resonance_name(protonated=False),
+                                     shifted.make_shift_description(protonated=False)])
+
+
+                    else:
+                        data.append([makeResonanceGuiName(resonance),
+                                     resonance.findFirstShift().value])
 
             table.update(objectList=data, textMatrix=data)
 
@@ -349,26 +368,15 @@ class SpinSystemComparePopup(BasePopup):
 
         return comparisons
 
-
-
-
-
     def compare2spinSystems(self, spinSystem1, spinSystem2):
-
-        correction = self.correctCheck.isSelected()
 
         comp = SpinSystemComparison(spinSystem1=spinSystem1,
                                     spinSystem2=spinSystem2,
-                                    isotope_correction=correction,
+                                    isotope_correction=self.correction,
                                     protonatedShiftList=self.protonatedShiftList,
                                     deuteratedShiftList=self.deuteratedShiftList)
 
         return comp
-
-        #if spinSystem1 in self.matchMatrix:
-        #    self.matchMatrix[spinSystem1][spinSystem2] = comp
-        #else:
-        #    self.matchMatrix[spinSystem1] = {spinSystem2: comp}
 
 
 def find_all_shiftLists_for_resonanceGroup(resonanceGroup):
@@ -425,6 +433,14 @@ def make_resonance_string(resonance):
         return '[{}]'.format(resonance.serial)
 
 
+def resonance_in_shiftLists(resonance, shiftLists):
+
+    for shiftList in shiftLists:
+        if resonance.findFirstShift(parentList=shiftList):
+            return True
+    return False
+
+
 class SpinSystemComparison(object):
 
     def __init__(self, spinSystem1, spinSystem2,
@@ -443,11 +459,11 @@ class SpinSystemComparison(object):
                      protonatedShiftList,
                      deuteratedShiftList)
 
-
     def compare(self, isotope_correction=True,
                 protonatedShiftList=None,
                 deuteratedShiftList=None):
 
+        shiftLists = [protonatedShiftList, deuteratedShiftList]
         resonances1 = self.spinSystem1.getResonances()
         resonances2 = self.spinSystem2.getResonances()
         combinations = []
@@ -455,15 +471,22 @@ class SpinSystemComparison(object):
         compared2 = set()
 
         for res1 in resonances1:
-            if not (res1.assignNames and res1.findFirstShift()):
+            if not res1.assignNames:
                 continue
+            if not resonance_in_shiftLists(res1, shiftLists):
+                continue
+
             for res2 in resonances2:
-                if not (res2.assignNames and res2.findFirstShift()):
+                if not res2.assignNames:
                     continue
-                if res1.assignNames[0] == res2.assignNames[0]:
-                    combinations.append((res1, res2))
-                    compared1.add(res1)
-                    compared2.add(res2)
+                if not resonance_in_shiftLists(res2, shiftLists):
+                    continue
+                if not res1.assignNames[0] == res2.assignNames[0]:
+                    continue
+
+                combinations.append((res1, res2))
+                compared1.add(res1)
+                compared2.add(res2)
 
         self.difference1 = resonances1 - compared1
         self.difference2 = resonances2 - compared2
@@ -562,7 +585,6 @@ class ShiftedResonce(object):
                                             deuterated=False)
             self.deuterated_is_estimate = True
 
-
         if self.deuterated_shift and not self.protonated_shift:
             self.protonated_shift = correct(aa_name=aa_name,
                                             atom_name=self.resonance.assignNames[0],
@@ -579,6 +601,24 @@ class ShiftedResonce(object):
             print self.protonated_shift
             print 'bbb'
             print self.deuterated_shift
+
+    def make_resonance_name(self, protonated=True):
+        if protonated:
+            return makeResonanceGuiName(self.resonance)
+        else:
+            return '{} (D)'.format(makeResonanceGuiName(self.resonance))
+
+    def make_shift_description(self, protonated=True):
+        if protonated:
+            shift = self.protonated_shift
+            estimated = self.protonated_is_estimate
+        else:
+            shift = self.deuterated_shift
+            estimated = self.deuterated_is_estimate
+        if estimated:
+            return '{}?'.format(round(shift, 3))
+        else:
+            return str(round(shift, 3))
 
 
 class ResonanceComparison(object):
