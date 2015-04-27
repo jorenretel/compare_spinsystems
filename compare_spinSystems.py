@@ -1,3 +1,6 @@
+'''
+CCPN Analysis macro that helps with comparing (isotope shifted) spin systems.
+'''
 
 from memops.gui.LabelFrame import LabelFrame
 from memops.gui.PulldownList import PulldownList
@@ -12,7 +15,7 @@ from isotope_shift import correct_for_isotope_shift as correct
 
 
 def open_spinsystem_compare(argServer):
-    """Descrn: Opens the shift reference pop-up for two residue types.
+    """Opens a pop-up that lets you compare any two spin systems.
        Inputs: ArgumentServer
        Output: None
     """
@@ -20,8 +23,12 @@ def open_spinsystem_compare(argServer):
 
 
 class SpinSystemComparePopup(BasePopup):
+    '''The popop for comparing spin systems to one another.'''
 
     def __init__(self, parent, *args, **kw):
+        '''Init. Args: parent: guiParent.
+
+        '''
 
         self.guiParent = parent
         self.spinSystem1 = None
@@ -29,9 +36,7 @@ class SpinSystemComparePopup(BasePopup):
         self.correction = True
         self.protonatedShiftList = None
         self.deuteratedShiftList = None
-
         BasePopup.__init__(self, parent, title="Compare Spin Systems", **kw)
-
         self.waiting = False
 
     def open(self):
@@ -40,6 +45,11 @@ class SpinSystemComparePopup(BasePopup):
         BasePopup.open(self)
 
     def body(self, guiFrame):
+        '''This method describes the outline of the body of the
+           application.
+               args: guiFrame: frame the body should live in.
+
+        '''
 
         self.geometry('800x530')
 
@@ -118,7 +128,6 @@ class SpinSystemComparePopup(BasePopup):
 
 
         # Table A1
-
         headingList = ['#', 'shift lists', 'Assignment']
 
         tipTexts = ['Spin System Serial',
@@ -183,28 +192,54 @@ class SpinSystemComparePopup(BasePopup):
         self.updateTableA1()
 
     def update(self):
-        if self.spinSystem1 and self.spinSystem2:
-            self.updateTableA2()
-            self.updateCompareTables()
+        '''Updates all tables except for tableA1.
+
+        '''
+
+        self.updateTableA2()
+        self.updateCompareTables()
 
     def setCorrection(self, selected):
+        '''Toggles on/off whether the isotope correction should
+           be applied or not.
+               args:    selected: Boolean, is True if isotope
+                                  correction is to be applied.
+
+        '''
         if self.correction is not selected:
             self.correction = selected
             self.update()
 
     def setProtonatedShiftList(self, shiftList):
+        '''Set the shift list where protonated values of
+           the chemical shifts should be fetched.
+               args:    shiftList: shift list with
+                        protonated shifts.
+
+        '''
 
         if not self.protonatedShiftList is shiftList:
             self.protonatedShiftList = shiftList
             self.update()
 
     def setDeuteratedShiftList(self, shiftList):
+        '''Set the shift list where deuterated values of
+           the chemical shifts should be fetched.
+               args:    shiftList: shift list with
+                        deuterated shifts.
+
+        '''
 
         if not self.deuteratedShiftList is shiftList:
             self.deuteratedShiftList = shiftList
             self.update()
 
     def setSpinSystem1(self, spinSystem):
+        '''Set the first of two spin systems that should
+           be compared.
+               args:    spinSystem: first of two spin systems
+
+        '''
 
         if spinSystem is not self.spinSystem1:
 
@@ -212,6 +247,11 @@ class SpinSystemComparePopup(BasePopup):
             self.updateTableA2()
 
     def setSpinSystem2(self, spinSystem):
+        '''Set the second of two spin systems that should
+           be compared.
+               args:    spinSystem: second of two spin systems
+
+        '''
 
         if spinSystem is not self.spinSystem2:
 
@@ -219,28 +259,31 @@ class SpinSystemComparePopup(BasePopup):
             self.updateCompareTables()
 
     def updateTableA1(self):
+        '''Update tableA1 where the first spin systems is picked from.
+
+        '''
 
         data = []
         objectList = []
-
         spinSystems = self.nmrProject.resonanceGroups
 
         for spinSystem in spinSystems:
-
-            shiftLists_string = make_shiftLists_string(find_all_shiftLists_for_resonanceGroup(spinSystem))
-
             objectList.append(spinSystem)
-            oneRow = []
-            oneRow.append(spinSystem.serial)
-            oneRow.append(shiftLists_string)
-            oneRow.append(make_resonanceGroup_string(spinSystem))
-
-            data.append(oneRow)
+            shiftLists_string = make_shiftLists_string(find_all_shiftLists_for_resonanceGroup(spinSystem))
+            data.append([spinSystem.serial,
+                         shiftLists_string,
+                         make_resonanceGroup_string(spinSystem)])
 
         self.tableA1.update(objectList=objectList, textMatrix=data)
         self.tableA1.sortLine(2)
 
     def updateTableA2(self):
+        '''Update tableA2 where the second spin systems is picked from.
+
+        '''
+
+        if not self.spinSystem1:
+            return
 
         comparisons = self.compareToSpinSystem(self.spinSystem1)
 
@@ -278,6 +321,15 @@ class SpinSystemComparePopup(BasePopup):
                             colorMatrix=colorMatrix)
 
     def updateCompareTables(self):
+        '''Update all tables that compare 2 spin systems. These are the
+           diff tables that show resonances unique to either one of the
+           spin systems and the union table, where resonance types that
+           are present in both spin systems are compared by chemical shift.
+
+        '''
+
+        if not self.spinSystem1 or not self.spinSystem2:
+            return
 
         spinSystemComp = self.compare2spinSystems(self.spinSystem1,
                                                   self.spinSystem2)
@@ -285,8 +337,12 @@ class SpinSystemComparePopup(BasePopup):
         self.updateDiffTables(spinSystemComp)
 
     def updateDiffTables(self, spinSystemComp):
+        '''Update the two tables that show the resonance types that are
+           unique to respectively either the first or the second spin system.
+           args:    spinSystemComp:    SpinSystemComparison comparing the two
+                                       selected spin systems.
 
-        correction = self.correction
+        '''
 
         for diff, table in [(spinSystemComp.difference1, self.tableB1),
                             (spinSystemComp.difference2, self.tableB3)]:
@@ -296,7 +352,7 @@ class SpinSystemComparePopup(BasePopup):
                                            [self.protonatedShiftList,
                                             self.deuteratedShiftList]):
 
-                    if correction and self.protonatedShiftList \
+                    if self.correction and self.protonatedShiftList \
                        and self.deuteratedShiftList \
                        and resonance.assignNames[0] in ('CA', 'CB') \
                        and resonance.assignNames[0] in ('CA', 'CB'):
@@ -319,13 +375,19 @@ class SpinSystemComparePopup(BasePopup):
             table.update(objectList=data, textMatrix=data)
 
     def updateUnionTable(self, spinSystemComp):
+        '''Update the table that shows the resonance types that are
+           present in both spin systems.
+           args:    spinSystemComp:    SpinSystemComparison comparing the two
+                                       selected spin systems.
+
+        '''
 
         intersectData = []
         colorMatrix = []
 
         for resComp in spinSystemComp.intersection:
 
-            oneRow = [resComp.atomName]
+            oneRow = [resComp.resonance_name]
             oneRow.extend(resComp.shifts_description)
             oneRow.append(resComp.delta)
             intersectData.append(oneRow)
@@ -339,24 +401,12 @@ class SpinSystemComparePopup(BasePopup):
                             textMatrix=intersectData,
                             colorMatrix=colorMatrix)
 
-    def compareSpinSystems(self):
-
-        spinSystems = self.nmrProject.resonanceGroups
-
-        # taking all spinsystems in the project
-        for spinSystem1 in spinSystems:
-
-            if not spinSystem1.resonances:
-                continue
-
-            for spinSystem2 in spinSystems:
-
-                if not spinSystem2.resonances:
-                    continue
-
-                self.compare2spinSystems(spinSystem1, spinSystem2)
-
     def compareToSpinSystem(self, spinSystem):
+        '''Compare one spin system to all others.
+           args:    spinSystem:    spin system
+           returns: list of SpinSystemComparison objects.
+
+        '''
 
         spinSystems = self.nmrProject.resonanceGroups
         comparisons = []
@@ -369,17 +419,28 @@ class SpinSystemComparePopup(BasePopup):
         return comparisons
 
     def compare2spinSystems(self, spinSystem1, spinSystem2):
+        '''Compare two spin systems to each other.
+           args:    spinSystem1:    the first spin system
+                    spinSystem2:    the second spin system
+           returns: SpinSystemComparison object
+
+        '''
 
         comp = SpinSystemComparison(spinSystem1=spinSystem1,
                                     spinSystem2=spinSystem2,
                                     isotope_correction=self.correction,
                                     protonatedShiftList=self.protonatedShiftList,
                                     deuteratedShiftList=self.deuteratedShiftList)
-
         return comp
 
 
 def find_all_shiftLists_for_resonanceGroup(resonanceGroup):
+    '''Find all shift lists the resonance of a resonanceGroup (spin system)
+       are represented in.
+       args:    resonanceGroup:    spin system
+       returns: list of shift lists
+
+    '''
 
     shiftLists = set()
 
@@ -390,19 +451,28 @@ def find_all_shiftLists_for_resonanceGroup(resonanceGroup):
 
 
 def make_shiftLists_string(shiftLists):
+    '''For a list iterable of shift lists, produce a short string
+       that identifies those shiftlists.
+       args:    shiftLists:    iterable of shift lists
+       returns: str of comma seperated shift list serials
+
+    '''
 
     return ','.join([str(shiftList.serial) for shiftList in shiftLists])
 
 
 def make_resonanceGroup_string(resonanceGroup):
+    '''Make a more human readable description of a spin system.
+       args:    resonanceGroup:    spin system
+       returns: str description
+
+    '''
 
     if resonanceGroup.residue:
-
         string = '{} {}'.format(resonanceGroup.residue.seqCode,
                                 getResidueCode(resonanceGroup.residue.molResidue))
 
     elif resonanceGroup.residueProbs:
-
         substrings = []
         for prob in resonanceGroup.residueProbs:
 
@@ -412,28 +482,24 @@ def make_resonanceGroup_string(resonanceGroup):
             substrings.append(' '.join([str(res.seqCode),
                                         getResidueCode(res),
                                         '?']))
-
         string = ' / '.join(substrings)
 
     elif resonanceGroup.ccpCode:
-
         string = resonanceGroup.ccpCode
-
     else:
-
         string = '-'
-
     return string
 
 
-def make_resonance_string(resonance):
-    if resonance.assignNames:
-        return resonance.assignNames[0]
-    else:
-        return '[{}]'.format(resonance.serial)
-
-
 def resonance_in_shiftLists(resonance, shiftLists):
+    '''Returns True if resonance is present in at least one of the
+       shiftLists.
+       args:    resonance:    Resonance object
+                shiftLists:   iterable of shiftLists that should be
+                              searched.
+       returns: Boolean
+
+    '''
 
     for shiftList in shiftLists:
         if resonance.findFirstShift(parentList=shiftList):
@@ -442,6 +508,10 @@ def resonance_in_shiftLists(resonance, shiftLists):
 
 
 class SpinSystemComparison(object):
+    '''Contains all information about the differences and similarities
+       of two spin systems.
+
+    '''
 
     def __init__(self, spinSystem1, spinSystem2,
                  isotope_correction=True,
@@ -462,6 +532,19 @@ class SpinSystemComparison(object):
     def compare(self, isotope_correction=True,
                 protonatedShiftList=None,
                 deuteratedShiftList=None):
+        '''Compares the two spin systems to each other and
+           and thereby sets up some of the objects attributes
+           like 'deviation', 'intersection', d'ifference1'
+           and 'difference2'.
+           args:    isotope_correction:  Boolean indicatinng whether
+                                         isotope shift correction should
+                                         be performed.
+                    protonatedShiftList: The shift list containing the
+                                         protonated shifts.
+                    deuteratedShiftList: The shift list containing the
+                                         deuterated shifts.
+
+        '''
 
         shiftLists = [protonatedShiftList, deuteratedShiftList]
         resonances1 = self.spinSystem1.getResonances()
@@ -542,6 +625,9 @@ class SpinSystemComparison(object):
 
     @property
     def match(self):
+        '''Bool, True if all overlapping shifts within the two spin
+           systems 'match'.
+        '''
 
         for resonance_comparison in self.intersection:
             if not resonance_comparison.match:
@@ -550,8 +636,19 @@ class SpinSystemComparison(object):
 
 
 class ShiftedResonce(object):
+    '''Contains all inforation about the protonated and deuterated
+       chemical shift of a resonance and whether these chemical shifts
+       are measured or estimated.
+
+    '''
 
     def __init__(self, resonance, protonatedShiftList, deuteratedShiftList):
+        '''Init.
+           args:    resonance:    resonance that is described.
+                    protonatedShiftList: shift list of protonated shifts
+                    deuteratedShiftList: shift list of deuterated shifts
+
+        '''
 
         self.resonance = resonance
         self.protonatedShiftList = protonatedShiftList
@@ -563,6 +660,11 @@ class ShiftedResonce(object):
         self.determine_shifts()
 
     def determine_shifts(self):
+        '''Determine protonated and deuterated shift for the described
+           resonance. If the resonance is present in one or both of the
+           shift lists, the chemical shift value is taken directly from
+           there. If
+        '''
 
         shift_object = self.resonance.findFirstShift(parentList=self.protonatedShiftList)
         if shift_object:
@@ -592,23 +694,36 @@ class ShiftedResonce(object):
                                             deuterated=True)
             self.protonated_is_estimate = True
 
-
         if not self.protonated_shift and not self.deuterated_shift:
-            print 'alarm'
-            print self.resonance.serial
-            print self.resonance.findFirstShift()
-            print 'aaaa'
-            print self.protonated_shift
-            print 'bbb'
-            print self.deuterated_shift
+
+            text = '''Resonance {} does not have a shift in either
+                      of the two shift lists {} and {}.'''
+            raise ValueError(text.format(self.resonance.serial,
+                                         self.protonatedShiftList,
+                                         self.deuteratedShiftList))
 
     def make_resonance_name(self, protonated=True):
+        '''Returns a resonance name where deuterated and
+           protonated are distinguishable.
+           args:    Protonated:    Bool, if True, protonated name is
+                                   returned, else the deuterated name.
+           returns: str name description
+
+        '''
+
         if protonated:
             return makeResonanceGuiName(self.resonance)
         else:
             return '{} (D)'.format(makeResonanceGuiName(self.resonance))
 
     def make_shift_description(self, protonated=True):
+        '''Returns protonated or deuterated chemical shift with
+           a question mark if the value is estimated.
+           args:    Protonated:    Bool, if True, protonated shift is
+                                   returned, else the deuterated shift.
+           returns: str shift description
+
+        '''
         if protonated:
             shift = self.protonated_shift
             estimated = self.protonated_is_estimate
@@ -622,11 +737,20 @@ class ShiftedResonce(object):
 
 
 class ResonanceComparison(object):
-    """docstring for resonanceMatch"""
+    """Compares two resonances in terms of chemical shift"""
     def __init__(self, resonances, shifts, deuterated=False,
                  estimated=(False, False)):
+        '''Init.
+           args:    resonances:    the 2 resonances that are compared.
+                    shifts:        chemical shifts of the resonances.
+                    deuterated:    Boolean, indicating whether shifts
+                                   are deuterated or not.
+                    estimated:     2-list of Booleans, indicating
+                                   whether corresponding shifts are
+                                   estimated or measured.
 
-        super(ResonanceComparison, self).__init__()
+        '''
+
         self.resonances = resonances
         self.deuterated = deuterated
         self.shifts = shifts
@@ -634,16 +758,27 @@ class ResonanceComparison(object):
 
     @property
     def delta(self):
+        '''Absolute difference between two shifts.
+
+        '''
         return abs(self.shifts[0] - self.shifts[1])
 
     @property
     def match(self):
+        '''Boolean, True if shifts match under cut-off value.
+
+        '''
+
         if self.delta < 0.5:
             return True
         return False
 
     @property
-    def atomName(self):
+    def resonance_name(self):
+        '''name describing resonance type including
+           indication for deuterated shift.
+
+        '''
         if self.resonances[0].assignNames:
             name = self.resonances[0].assignNames[0]
         elif self.resonances[1].assignNames:
@@ -656,6 +791,11 @@ class ResonanceComparison(object):
 
     @property
     def shifts_description(self):
+        '''Describes chemical shift. If the exact chemical shift
+           is estimated because of isotope correction, this is
+           indicated by a question mark.
+
+        '''
 
         description = []
         for shift, estimated in zip(self.shifts, self.estimated):
