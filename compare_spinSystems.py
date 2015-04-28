@@ -24,7 +24,7 @@ from ccpnmr.analysis.popups.BasePopup import BasePopup
 from ccpnmr.analysis.core.MoleculeBasic import getResidueCode
 from ccpnmr.analysis.core.AssignmentBasic import (getShiftLists,
                                                   makeResonanceGuiName)
-from isotope_shift import correct_for_isotope_shift as correct
+from ccpn_isotope_shift import ShiftedResonce
 
 
 def open_spinsystem_compare(argServer):
@@ -447,22 +447,6 @@ class SpinSystemComparePopup(BasePopup):
         return comp
 
 
-def find_all_shiftLists_for_resonanceGroup(resonanceGroup):
-    '''Find all shift lists the resonance of a resonanceGroup (spin system)
-       are represented in.
-       args:    resonanceGroup:    spin system
-       returns: list of shift lists
-
-    '''
-
-    shiftLists = set()
-
-    for resonance in resonanceGroup.resonances:
-        shiftLists.update([shift.parentList for shift in resonance.getShifts()])
-
-    return sorted(list(shiftLists), reverse=True)
-
-
 def make_shiftLists_string(shiftLists):
     '''For a list iterable of shift lists, produce a short string
        that identifies those shiftlists.
@@ -503,6 +487,21 @@ def make_resonanceGroup_string(resonanceGroup):
         string = '-'
     return string
 
+
+def find_all_shiftLists_for_resonanceGroup(resonanceGroup):
+    '''Find all shift lists the resonance of a resonanceGroup (spin system)
+       are represented in.
+       args:    resonanceGroup:    spin system
+       returns: list of shift lists
+
+    '''
+
+    shiftLists = set()
+
+    for resonance in resonanceGroup.resonances:
+        shiftLists.update([shift.parentList for shift in resonance.getShifts()])
+
+    return sorted(list(shiftLists), reverse=True)
 
 def resonance_in_shiftLists(resonance, shiftLists):
     '''Returns True if resonance is present in at least one of the
@@ -648,72 +647,7 @@ class SpinSystemComparison(object):
         return True
 
 
-class ShiftedResonce(object):
-    '''Contains all inforation about the protonated and deuterated
-       chemical shift of a resonance and whether these chemical shifts
-       are measured or estimated.
 
-    '''
-
-    def __init__(self, resonance, protonatedShiftList, deuteratedShiftList):
-        '''Init.
-           args:    resonance:    resonance that is described.
-                    protonatedShiftList: shift list of protonated shifts
-                    deuteratedShiftList: shift list of deuterated shifts
-
-        '''
-
-        self.resonance = resonance
-        self.protonatedShiftList = protonatedShiftList
-        self.deuteratedShiftList = deuteratedShiftList
-        self.protonated_shift = None
-        self.deuterated_shift = None
-        self.protonated_is_estimate = False
-        self.deuterated_is_estimate = False
-        self.determine_shifts()
-
-    def determine_shifts(self):
-        '''Determine protonated and deuterated shift for the described
-           resonance. If the resonance is present in one or both of the
-           shift lists, the chemical shift value is taken directly from
-           there. If
-        '''
-
-        shift_object = self.resonance.findFirstShift(parentList=self.protonatedShiftList)
-        if shift_object:
-            self.protonated_shift = shift_object.value
-        shift_object = self.resonance.findFirstShift(parentList=self.deuteratedShiftList)
-        if shift_object:
-            self.deuterated_shift = shift_object.value
-
-        # Find out amino acid type
-        aa_name = self.resonance.resonanceGroup.ccpCode
-        if not aa_name and self.resonance.resonanceGroup.residue:
-            aa_name = self.resonance.resonanceGroup.residue.ccpCode
-        if not aa_name:
-            aa_name = 'Avg'
-
-        if self.protonated_shift and not self.deuterated_shift:
-            self.deuterated_shift = correct(aa_name=aa_name,
-                                            atom_name=self.resonance.assignNames[0],
-                                            shift=self.protonated_shift,
-                                            deuterated=False)
-            self.deuterated_is_estimate = True
-
-        if self.deuterated_shift and not self.protonated_shift:
-            self.protonated_shift = correct(aa_name=aa_name,
-                                            atom_name=self.resonance.assignNames[0],
-                                            shift=self.deuterated_shift,
-                                            deuterated=True)
-            self.protonated_is_estimate = True
-
-        if not self.protonated_shift and not self.deuterated_shift:
-
-            text = '''Resonance {} does not have a shift in either
-                      of the two shift lists {} and {}.'''
-            raise ValueError(text.format(self.resonance.serial,
-                                         self.protonatedShiftList,
-                                         self.deuteratedShiftList))
 
     def make_resonance_name(self, protonated=True):
         '''Returns a resonance name where deuterated and
