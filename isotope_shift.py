@@ -1,4 +1,29 @@
 '''
+Calculates isotope shifts for CA and CB nuclei in protonated and
+deuterated samples.
+
+Values are taken from two papers:
+
+Venters, Ronald A., Bennett T. Farmer II, Carol A. Fierke,
+and Leonard D. Spicer. "Characterizing the use of perdeuteration in NMR
+studies of large proteins: 13 C, 15 N and 1 H assignments of human
+carbonic anhydrase II." Journal of molecular biology 264, no. 5 (1996):
+1101-1116.
+
+Maltsev, Alexander S., Jinfa Ying, and Ad Bax. "Deuterium isotope shifts
+for backbone 1H, 15N and 13C nuclei in intrinsically disordered protein
+alpha-synuclein." Journal of biomolecular NMR 54, no. 2 (2012): 181-191.
+
+The former paper describes how to predict the shift in chemical shift of
+CA and CB nuclei due to deuteration of the sample. Also deviation from
+the prediction of experimental values (which is significant in a few
+cases)are described in the paper, which allows back calculation of the
+original average isotope shift.
+
+The latter paper directly lists the experimental isotope shift. These
+are also the correction values used in the Talos+ software.
+
+
 Copyright (C) 2015 Joren Retel
 
 This program is free software: you can redistribute it and/or modify it under
@@ -12,9 +37,6 @@ You should have received a copy of the GNU General Public License along with thi
 If not, see http://www.gnu.org/licenses/.
 
 '''
-
-#DC(D) = 1 DC(D)d 1b + 2 DC(D)d 2b + 3 DC(D)d 3b
-
 
 groupA_deuterons = [(1, 2, 0), (2, 1, 0)]
 groupB_deuterons = [(1, 2, 2), (2, 3, 2)]
@@ -93,24 +115,32 @@ talos_iso_corr = {'Asn': (-0.387, -0.617),
                   'Avg': (-0.448, -0.837)}
 
 
-Delta1 = -0.29
-Delta2 = -0.13
-Delta3 = -0.07
-
-
 def predict_isotope_shifts(aa_name):
+    '''Using the method described by Venters et al.'''
+
+    delta1 = -0.29
+    delta2 = -0.13
+    delta3 = -0.07
 
     deuterons = deuterons_aa_dict[aa_name]
 
     ca_deuterons, cb_deuterons = deuterons
 
-    ca_shift = (Delta1 * ca_deuterons[0]) + (Delta2 * ca_deuterons[1]) + (Delta3 * ca_deuterons[2]) #- deviation_venter[aa_name][0]
-    cb_shift = (Delta1 * cb_deuterons[0]) + (Delta2 * cb_deuterons[1]) + (Delta3 * cb_deuterons[2]) #- deviation_venter[aa_name][1]
+    ca_shift = (delta1 * ca_deuterons[0]) + (delta2 * ca_deuterons[1]) + (delta3 * ca_deuterons[2]) #- deviation_venter[aa_name][0]
+    cb_shift = (delta1 * cb_deuterons[0]) + (delta2 * cb_deuterons[1]) + (delta3 * cb_deuterons[2]) #- deviation_venter[aa_name][1]
 
     return ca_shift, cb_shift
 
 
 def correct_for_isotope_shift(aa_name, atom_name, shift, deuterated=False):
+    '''Return the expected observed chemical shift in a deuterated
+       sample, based on the shift in a protonated sample, or vise versa.
+       args:    aa_name:     three letter amino acid code
+                atom_name:   'CA' or 'CB'
+                shift:       float measured shift
+                deuterated:  Boolean, should be True if the given shift
+                             corresponds to the deuterated sample.
+    '''
 
     if atom_name not in ('CA', 'CB'):
         raise ValueError('''Only isotope correction data available
@@ -127,11 +157,11 @@ def correct_for_isotope_shift(aa_name, atom_name, shift, deuterated=False):
 
 if __name__ == '__main__':
 
-    for aa_name, deuterons in deuterons_aa_dict.items():
+    for aa in deuterons_aa_dict.keys():
 
-        pred = predict_isotope_shifts(aa_name)[0]
-        talos = talos_iso_corr[aa_name][0]
+        pred = predict_isotope_shifts(aa)[0]
+        talos = talos_iso_corr[aa][0]
 
         t = '\t'
 
-        print aa_name, t, pred, t, pred + deviation_venter[aa_name][0], t, talos, t, pred - talos, t, (pred + deviation_venter[aa_name][0]) -talos
+        print aa, t, pred, t, pred + deviation_venter[aa][0], t, talos, t, pred - talos, t, (pred + deviation_venter[aa][0]) -talos

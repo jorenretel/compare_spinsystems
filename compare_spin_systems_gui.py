@@ -349,10 +349,10 @@ class SpinSystemComparePopup(BasePopup):
 
         '''
 
-        for diff, table in [(spinSystemComp.difference1, self.tableB1),
-                            (spinSystemComp.difference2, self.tableB3)]:
+        for shiftedShifts, table in [(spinSystemComp.unique_to_1, self.tableB1),
+                                     (spinSystemComp.unique_to_2, self.tableB3)]:
             data = []
-            for shiftedShift in diff:
+            for shiftedShift in shiftedShifts:
 
                 data.append([shiftedShift.create_name(),
                              shiftedShift.create_shift_description()])

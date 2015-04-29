@@ -1,24 +1,35 @@
+'''Can be used to calculate pairs of protonated - deuterated chemical
+   shifts for a resonance when the different protonated and deuterated
+   shifts are
+
+'''
+
 from isotope_shift import correct_for_isotope_shift as correct
 from ccpnmr.analysis.core.AssignmentBasic import makeResonanceGuiName
 
 
 class ShiftedResonce(object):
     '''Contains all inforation about the protonated and deuterated
-       chemical shift of a resonance and whether these chemical shifts
-       are measured or estimated.
+       chemical shift.
 
     '''
 
     def __init__(self, resonance, protonatedShiftList=None,
-                 deuteratedShiftList=None, correct=True):
+                 deuteratedShiftList=None, isotope_correction=True):
         '''Init.
            args:    resonance:    resonance that is described.
                     protonatedShiftList: shift list of protonated shifts
                     deuteratedShiftList: shift list of deuterated shifts
+                    correct: If False, no isotope correction will be
+                             performed and the first shift that is found
+                             is used. The object will only contain one
+                             shiftedShift. If True, istope correction
+                             will be carried out for CA and CB chemical
+                             shifts.
 
         '''
 
-        self.correct = correct
+        self.isotope_correction = isotope_correction
         self.resonance = resonance
         self.shiftedShifts = []
         self.protonatedShiftList = protonatedShiftList
@@ -32,7 +43,7 @@ class ShiftedResonce(object):
            there. If
         '''
 
-        if self.correct and self.protonatedShiftList \
+        if self.isotope_correction and self.protonatedShiftList \
            and self.deuteratedShiftList \
            and self.resonance.assignNames[0] in ('CA', 'CB'):
 
