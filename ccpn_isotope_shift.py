@@ -1,4 +1,5 @@
 from isotope_shift import correct_for_isotope_shift as correct
+from ccpnmr.analysis.core.AssignmentBasic import makeResonanceGuiName
 
 
 class ShiftedResonce(object):
@@ -8,7 +9,8 @@ class ShiftedResonce(object):
 
     '''
 
-    def __init__(self, resonance, protonatedShiftList, deuteratedShiftList):
+    def __init__(self, resonance, protonatedShiftList=None,
+                 deuteratedShiftList=None, correct=True):
         '''Init.
            args:    resonance:    resonance that is described.
                     protonatedShiftList: shift list of protonated shifts
@@ -16,13 +18,11 @@ class ShiftedResonce(object):
 
         '''
 
+        self.correct = correct
         self.resonance = resonance
+        self.shiftedShifts = []
         self.protonatedShiftList = protonatedShiftList
         self.deuteratedShiftList = deuteratedShiftList
-        self.protonated_shift = None
-        self.deuterated_shift = None
-        self.protonated_is_estimate = False
-        self.deuterated_is_estimate = False
         self.determine_shifts()
 
     def determine_shifts(self):
@@ -32,68 +32,91 @@ class ShiftedResonce(object):
            there. If
         '''
 
-        shift_object = self.resonance.findFirstShift(parentList=self.protonatedShiftList)
-        if shift_object:
-            self.protonated_shift = shift_object.value
-        shift_object = self.resonance.findFirstShift(parentList=self.deuteratedShiftList)
-        if shift_object:
-            self.deuterated_shift = shift_object.value
+        if self.correct and self.protonatedShiftList \
+           and self.deuteratedShiftList \
+           and self.resonance.assignNames[0] in ('CA', 'CB'):
 
-        # Find out amino acid type
-        aa_name = self.resonance.resonanceGroup.ccpCode
-        if not aa_name and self.resonance.resonanceGroup.residue:
-            aa_name = self.resonance.resonanceGroup.residue.ccpCode
-        if not aa_name:
-            aa_name = 'Avg'
+            protonated_shift = None
+            deuterated_shift = None
+            protonated_is_estimate = False
+            deuterated_is_estimate = False
 
-        if self.protonated_shift and not self.deuterated_shift:
-            self.deuterated_shift = correct(aa_name=aa_name,
-                                            atom_name=self.resonance.assignNames[0],
-                                            shift=self.protonated_shift,
-                                            deuterated=False)
-            self.deuterated_is_estimate = True
+            shift_object = self.resonance.findFirstShift(parentList=self.protonatedShiftList)
+            if shift_object:
+                protonated_shift = shift_object.value
+            shift_object = self.resonance.findFirstShift(parentList=self.deuteratedShiftList)
+            if shift_object:
+                deuterated_shift = shift_object.value
 
-        if self.deuterated_shift and not self.protonated_shift:
-            self.protonated_shift = correct(aa_name=aa_name,
-                                            atom_name=self.resonance.assignNames[0],
-                                            shift=self.deuterated_shift,
-                                            deuterated=True)
-            self.protonated_is_estimate = True
+            # Find out amino acid type
+            aa_name = self.resonance.resonanceGroup.ccpCode
+            if not aa_name and self.resonance.resonanceGroup.residue:
+                aa_name = self.resonance.resonanceGroup.residue.ccpCode
+            if not aa_name:
+                aa_name = 'Avg'
 
-        if not self.protonated_shift and not self.deuterated_shift:
+            if protonated_shift and not deuterated_shift:
+                deuterated_shift = correct(aa_name=aa_name,
+                                           atom_name=self.resonance.assignNames[0],
+                                           shift=protonated_shift,
+                                           deuterated=False)
+                deuterated_is_estimate = True
 
-            text = '''Resonance {} does not have a shift in either
-                      of the two shift lists {} and {}.'''
-            raise ValueError(text.format(self.resonance.serial,
-                                         self.protonatedShiftList,
-                                         self.deuteratedShiftList))
+            if deuterated_shift and not protonated_shift:
+                protonated_shift = correct(aa_name=aa_name,
+                                           atom_name=self.resonance.assignNames[0],
+                                           shift=deuterated_shift,
+                                           deuterated=True)
 
-    def make_resonance_name(self, protonated=True):
-        return 'replace this'
+                self.protonated_is_estimate = True
+
+            if not protonated_shift and not deuterated_shift:
+
+                text = '''Resonance {} does not have a shift in either
+                          of the two shift lists {} and {}.'''
+                raise ValueError(text.format(self.resonance.serial,
+                                             self.protonatedShiftList,
+                                             self.deuteratedShiftList))
+
+            self.shiftedShifts = [ShiftedShift(resonance=self.resonance,
+                                               value=protonated_shift,
+                                               estimated=protonated_is_estimate,
+                                               deuterated=False),
+                                  ShiftedShift(resonance=self.resonance,
+                                               value=deuterated_shift,
+                                               estimated=deuterated_is_estimate,
+                                               deuterated=True)]
+
+        else:
+            shiftedShift = ShiftedShift(resonance=self.resonance,
+                                        value=self.resonance.findFirstShift().value)
+            self.shiftedShifts = [shiftedShift]
 
 
 class ShiftedShift(object):
     """docstring for ShiftedShift"""
-    def __init__(self, value, estimated=False, deuterated=False):
+    def __init__(self, resonance, value, estimated=False, deuterated=False):
         super(ShiftedShift, self).__init__()
+        self.resonance = resonance
         self.value = value
         self.estimated = estimated
         self.deuterated = deuterated
 
-    @property
-    def name(self):
+    def create_name(self, full=True):
         '''Returns a resonance name where deuterated and
            protonated are distinguishable.
            returns: str name description
 
         '''
 
-        if self.protonated:
-            return makeResonanceGuiName(self.resonance)
-        else:
-            return '{} (D)'.format(makeResonanceGuiName(self.resonance))
+        name = makeResonanceGuiName(self.resonance, fullName=full)
 
-    def make_shift_description(self):
+        if not self.deuterated:
+            return name
+        else:
+            return '{} (D)'.format(name)
+
+    def create_shift_description(self):
         '''Returns protonated or deuterated chemical shift with
            a question mark if the value is estimated.
            returns: str shift description
