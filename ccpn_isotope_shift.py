@@ -79,7 +79,7 @@ class ShiftedResonce(object):
                                            shift=deuterated_shift,
                                            deuterated=True)
 
-                self.protonated_is_estimate = True
+                protonated_is_estimate = True
 
             if not protonated_shift and not deuterated_shift:
 
