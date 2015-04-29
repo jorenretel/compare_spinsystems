@@ -7,7 +7,7 @@ The user interface shows you two tables on top where you can select any two spin
 
 To use this plug-in. Just clone this repository or download it as a zip-archive. Unpack it wherever you want. Open CCPN analysis and open this macro by clicking:
 
-Menu -> Organize Macros -> Add Macro -> navigate to the location you unpacked the archive and select compare_spinSystems.py -> select the open_spinsystem_compare function in the bottom half of the menu -> Load Macro.
+Menu -> Organize Macros -> Add Macro -> navigate to the location you unpacked the archive and select start_spin_system_compare.py -> select the start_spin_system_compare function in the bottom half of the menu -> Load Macro.
 
 If everything is correct, the macro now appears in the list of macros and you can run it.
 
