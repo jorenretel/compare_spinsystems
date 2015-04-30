@@ -149,7 +149,7 @@ class SpinSystemComparePopup(BasePopup):
         self.tableA1.grid(row=0, column=0, sticky='nsew')
 
         # Table A2
-        headingList = ['#', 'shift lists', 'Assignment', 'RMSD']
+        headingList = ['#', 'shift lists', 'Assignment', 'offset']
         tipTexts = ['Spin System Serial', 'The residue (tentatively) assigned to this spin system',
                     'Root mean squared deviation of this spin system to the spin system selected in the table on the left.']
         editGetCallbacks = [self.setSpinSystem2]*4
